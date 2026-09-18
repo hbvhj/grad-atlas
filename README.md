@@ -1,11 +1,45 @@
 # Grad Atlas
 
-Private 2027 graduate application workspace. School view contains editable programs, rounds, admission requirements, tracks, and source links. GRE/TOEFL view stores goals and mock results and derives planning dates from selected deadlines.
+Bilingual graduate application tracker with 32 programs, country and school filters, rounds, requirements, study-extension policies and GRE/TOEFL planning.
 
-Records are stored in D1 with optimistic version checks. The private Sites access gateway restricts the entire site to the owner. Keep the site private unless application-level user isolation is added.
+## Deploy on Vercel
 
-Source monitoring runs on page open and periodically while open, with a per-program 24-hour cache. It detects changes to readable official admissions snippets and retains user edits for manual verification. It does not operate as an unattended scheduler. Current official domains are allowlisted server-side; other schools support manual editing and links.
+Import this private repository. Framework: **Next.js**. Root directory: repository root. Node.js: **22.x**. The included vercel.json sets the install command, build command and output directory. Remove any old custom Vite/dist overrides in the Vercel dashboard, then redeploy the newest main commit without the old build cache.
 
-Initial research was imported from the user's Graduate_Programs_2027.xlsx, checked September 14, 2026. LBS rounds and selected multi-program policies were updated September 16, 2026. Unverified information is explicitly labelled.
+Without database configuration, the website opens as an explicitly labelled **read-only preview**. The catalog and language switch work; saving and monitoring are disabled. It does not silently save to temporary server memory.
 
-Validation: TypeScript checks, production build, Worker SSR and D1 create/edit/delete, score validation, settings persistence, and conflict detection passed locally. Browser QA and WebMCP runtime validation were unavailable in this task's permitted context.
+## Enable private saved records
+
+The original Sites database is not copied into GitHub or automatically transferred to Vercel. Create a D1 database in your own Cloudflare account and run `drizzle/0000_early_the_watchers.sql` in its SQL console. Add the following server-only environment variables in Vercel and redeploy:
+
+- CLOUDFLARE_ACCOUNT_ID
+- CLOUDFLARE_D1_DATABASE_ID
+- CLOUDFLARE_D1_API_TOKEN: a token with D1 Edit permission scoped to that account
+- APP_PASSWORD: a strong workspace password
+
+The Vercel backend connects through the official D1 HTTPS API. No Cloudflare Worker binding is needed. With the database enabled, the entire workspace requires a browser login: use any username and APP_PASSWORD. A private GitHub repository alone does not protect deployed records. Do not share this password with read-only reviewers: authenticated visitors share the same editable workspace. A public no-database deployment is suitable for showing the catalog.
+
+Use a new empty D1 database for a fresh workspace. Existing Sites records need a separate deliberate export/import; deploying this repository does not migrate them. If importing older records, apply the second privacy migration as well. Keep API tokens in Vercel environment settings; never commit them.
+
+## Local development and checks
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm exec tsc --noEmit
+node tests/verify.mjs
+pnpm build
+pnpm start
+```
+
+Copy .env.example to .env.local only if enabling a personal database. The production build does not need database credentials. Files under build/, examples/, and scripts/ are inherited Sites tooling; standard Next.js build/start scripts do not invoke them. The original Sites deployment is unchanged.
+
+## Monitoring and data limits
+
+Official-source checks run when the workspace is open, with a daily cache per program. They identify changes for manual review; they do not autonomously replace deadlines or run while the website is closed. Unverified dates and policies remain marked. New schools outside the supported domains use manual links.
+
+## Repair notes
+
+The first GitHub upload truncated lib/seed.json and pnpm-lock.yaml to 90,060 bytes each. Both have been restored from the complete local source. The user-supplied repaired JSON was valid but omitted seven programs and parts of HEC–Yale and Oxford Social Data Science; the intact original records restore those losses. No removed personal profile data was reintroduced.
+
+This repository now uses a tested standard Next.js production build instead of the Sites/Cloudflare build. Production Vercel deployment and real D1 credentials must still be verified in the owner's account.

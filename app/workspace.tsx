@@ -13,6 +13,7 @@ import { Plus, ArrowUpRight, GraduationCap, CalendarDays, RefreshCw, Pencil, Che
 import seed from '@/lib/seed.json';
 import { Program, Mock, Settings, defaults, limits, programCountries, conflict, shift, today, total, validateMock } from '@/lib/model';
 type Data = {
+    readOnly?: boolean;
     programs: Program[];
     settings: Settings;
     mocks: Mock[];
@@ -51,9 +52,9 @@ function WorkspaceContent({ lang, setLang }: {
     dataRef.current = data;
     const checkLock = useRef(false);
     async function load() { const r = await fetch('/api/data'); const d: any = await r.json(); if (!r.ok)
-        throw Error(d.error); setData(d); setError(''); setLoaded(true); return d as Data; }
+        throw Error(d.error); setData(d); setError(''); setLoaded(!d.readOnly); return d as Data; }
     useEffect(() => { load().catch(e => setError(e.message)); }, []);
-    async function checkAll(force = false, ps = dataRef.current.programs) { if (checkLock.current)
+    async function checkAll(force = false, ps = dataRef.current.programs) { if (!loaded || dataRef.current.readOnly || checkLock.current)
         return; checkLock.current = true; setChecking(true); try {
         for (const p of ps) {
             const r = await fetch('/api/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id, force }) });
@@ -74,7 +75,7 @@ function WorkspaceContent({ lang, setLang }: {
     } }
     useEffect(() => { if (!loaded)
         return; const t = setTimeout(() => void checkAll(), 1200); const i = setInterval(() => void checkAll(), 15 * 60 * 1000); return () => { clearTimeout(t); clearInterval(i); }; }, [loaded]);
-    async function save(type: string, value: any, id?: string) { setSaving(true); try {
+    async function save(type: string, value: any, id?: string) { if(!loaded || dataRef.current.readOnly)return false; setSaving(true); try {
         const key = type === 'settings' ? 'settings' : type === 'delete' ? id! : type + ':' + value.id;
         const r = await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value, id, version: dataRef.current.versions[key] || 0 }) });
         const d: any = await r.json();
@@ -109,7 +110,8 @@ function WorkspaceContent({ lang, setLang }: {
     const future = data.programs.filter(p => p.planned).flatMap(p => { const r = p.rounds.find(r => r.id === p.selectedRound); return r?.date && r.date >= today() ? [{ p, r }] : []; }).sort((a, b) => a.r.date.localeCompare(b.r.date));
     const pending = data.programs.filter(p => !p.rounds.some(r => r.date && r.kind === 'deadline')).length;
     return <main className="workspace"><Toaster position="bottom-right" richColors/><header><div className="identity"><div className="mark"><GraduationCap size={24}/></div><span className="brand">Grad Atlas<span>2027</span></span></div><button className="secondary language-switch" onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')} aria-label={tx(lang === 'zh' ? 'Switch to English' : tx('切换为中文'))}>{tx(lang === 'zh' ? 'English' : tx('中文'))}</button></header>
- <Tabs value={tab} onValueChange={setTab}><div className="navrow"><TabsList variant="line" className="main-tabs"><TabsTrigger value="schools"><GraduationCap size={18}/>{tx("\u5B66\u6821")}<span className="tab-count">{tx(allSchools.length)}</span></TabsTrigger><TabsTrigger value="tests"><BookOpen size={18}/>{tx("\u6807\u5316")}</TabsTrigger></TabsList><span className="save-status">{tx(saving ? tx('保存中…') : loaded ? tx('个人工作台 · 记录跨设备保存') : tx('正在连接你的工作台'))}</span></div>
+ {data.readOnly && <div role="status" className="warning">{lang==='en'?'Read-only preview. Connect a database to enable saving and website monitoring.':'只读预览：连接数据库后可保存项目、考试记录并启用官网监测。'}</div>}
+ <Tabs value={tab} onValueChange={setTab}><div className="navrow"><TabsList variant="line" className="main-tabs"><TabsTrigger value="schools"><GraduationCap size={18}/>{tx("\u5B66\u6821")}<span className="tab-count">{tx(allSchools.length)}</span></TabsTrigger><TabsTrigger value="tests"><BookOpen size={18}/>{tx("\u6807\u5316")}</TabsTrigger></TabsList><span className="save-status">{tx(saving ? tx('保存中…') : data.readOnly ? (lang==='en'?'Read-only preview':'只读预览') : loaded ? tx('个人工作台 · 记录跨设备保存') : tx('正在连接你的工作台'))}</span></div>
  {tx(error && <div role="alert" className="warning">{tx(error)} <button onClick={() => load().catch(e => setError(e.message))}>{tx("\u91CD\u8BD5")}</button></div>)}
  <TabsContent value="schools"><div className="page-heading"><div><p className="eyebrow">APPLICATION WORKSPACE</p><h1>{tx("\u4E0B\u4E00\u7AD9\uFF0C\u7531\u4F60\u9009\u62E9\u3002")}</h1><p className="muted">{tx("\u5148\u9009\u56FD\u5BB6\u6216\u5730\u533A\uFF0C\u518D\u9009\u5B66\u6821\u6BD4\u8F83\u9879\u76EE\u3002")}</p></div><button className="primary" disabled={!loaded} onClick={() => setEditing({ ...newProgram(selectedSchool || ''), ...(selectedCountry !== 'all' ? { countries: [selectedCountry] } : {}) })}><Plus size={18}/>{tx("\u6DFB\u52A0\u9879\u76EE")}</button></div>
  <div className="overview"><div><span className="stat-value">{tx(data.programs.length)}</span><div><strong>{tx("\u6536\u85CF\u9879\u76EE")}</strong><p>{tx(allSchools.length)}{tx("\u6240\u5B66\u6821 \u00B7")}{tx(data.programs.filter(p => p.planned).length)}{tx("\u4E2A\u7EB3\u5165\u8BA1\u5212")}</p></div></div><div><CalendarDays size={25}/><div><strong>{tx(future[0]?.r.date || tx('尚未选择申请日期'))}</strong><p>{tx(future[0] ? future[0].p.school + ' · ' + tx(future[0].r.name) : tx('选择轮次后自动生成标化计划'))}</p></div></div><div><span className="stat-value amber">{tx(pending.toString().padStart(2, '0'))}</span><div><strong>{tx("\u65E5\u671F\u5F85\u8865\u5168")}</strong><p>{tx("\u4FDD\u7559\u7A7A\u7F3A\uFF0C\u6838\u5B9E\u540E\u518D\u7EB3\u5165\u5012\u6392")}</p></div></div></div>
